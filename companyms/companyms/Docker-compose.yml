@@ -1,0 +1,172 @@
+services:
+  postgres:
+    image: postgres
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-hdemus}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres:/data/postgres
+      - ./db-init:/docker-entrypoint-initdb.d
+    networks:
+      - postgres
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+    networks:
+      - postgres
+    restart: unless-stopped
+
+  servicereg:
+    image: sumedhudupa/servicereg:latest
+    container_name: servicereg
+    ports:
+      - "8761:8761"
+    networks:
+      - microservice-network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  config-server:
+    image: sumedhudupa/config-server:latest
+    container_name: config-server
+    ports:
+      - "8085:8085"
+    networks:
+      - microservice-network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka/
+    depends_on:
+      - servicereg
+
+  companyms:
+    image: sumedhudupa/companyms:latest
+    container_name: company
+    ports:
+      - "8083:8083"
+    networks:
+      - microservice-network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - CONFIG_SERVER_URL=http://config-server:8080
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka/
+      - EUREKA_INSTANCE_HOSTNAME=company
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=companyms
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-hdemus}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      - servicereg
+      - config-server
+      - postgres
+      - rabbitmq
+
+  jobms:
+    image: sumedhudupa/jobms:latest
+    container_name: job
+    ports: 
+      - "8082:8082"
+    networks:
+      - microservice-network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - CONFIG_SERVER_URL=http://config-server:8080
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka/
+      - EUREKA_INSTANCE_HOSTNAME=job
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=jobms
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-hdemus}
+    depends_on:
+      - servicereg
+      - config-server
+      - postgres
+
+  reviewms:
+    image: sumedhudupa/reviewms:latest
+    container_name: review
+    ports:
+      - "8084:8084"
+    networks:
+      - microservice-network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - CONFIG_SERVER_URL=http://config-server:8080
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka/
+      - EUREKA_INSTANCE_HOSTNAME=review
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=reviewms
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-hdemus}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      - servicereg
+      - config-server
+      - postgres
+      - rabbitmq
+
+  gateway: 
+    image: sumedhudupa/gateway:latest
+    container_name: gateway
+    ports:
+      - "8086:8086"
+    networks:
+      - microservice-network
+      - postgres
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka/
+      - EUREKA_INSTANCE_HOSTNAME=gateway
+    depends_on:
+      - servicereg
+      - config-server
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    networks:
+      - microservice-network
+      - postgres
+    restart: unless-stopped
+
+networks:
+  microservice-network:
+    driver: bridge
+  postgres:
+    driver: bridge
+
+volumes:
+  postgres:
+  pgadmin:
