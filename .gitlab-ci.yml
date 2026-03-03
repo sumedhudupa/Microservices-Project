@@ -80,37 +80,37 @@ build:service-reg:
   <<: *build-template
   script:
     - cd service-reg/service-reg
-    - ./mvnw --no-transfer-progress package -DskipTests
+    - sh mvnw --no-transfer-progress package -DskipTests
 
 build:config-server:
   <<: *build-template
   script:
     - cd Config-server
-    - ./mvnw --no-transfer-progress package -DskipTests
+    - sh mvnw --no-transfer-progress package -DskipTests
 
 build:gateway:
   <<: *build-template
   script:
     - cd gateway/gateway
-    - ./mvnw --no-transfer-progress package -DskipTests
+    - sh mvnw --no-transfer-progress package -DskipTests
 
 build:companyms:
   <<: *build-template
   script:
     - cd companyms/companyms
-    - ./mvnw --no-transfer-progress package -DskipTests
+    - sh mvnw --no-transfer-progress package -DskipTests
 
 build:jobms:
   <<: *build-template
   script:
     - cd jobms/jobms
-    - ./mvnw --no-transfer-progress package -DskipTests
+    - sh mvnw --no-transfer-progress package -DskipTests
 
 build:reviewms:
   <<: *build-template
   script:
     - cd reviewms/reviewms
-    - ./mvnw --no-transfer-progress package -DskipTests
+    - sh mvnw --no-transfer-progress package -DskipTests
 
 # ===========================================================================
 # STAGE 2 — TEST
@@ -121,42 +121,42 @@ test:service-reg:
   needs: [build:service-reg]
   script:
     - cd service-reg/service-reg
-    - ./mvnw --no-transfer-progress test
+    - sh mvnw --no-transfer-progress test
 
 test:config-server:
   <<: *test-template
   needs: [build:config-server]
   script:
     - cd Config-server
-    - ./mvnw --no-transfer-progress test
+    - sh mvnw --no-transfer-progress test
 
 test:gateway:
   <<: *test-template
   needs: [build:gateway]
   script:
     - cd gateway/gateway
-    - ./mvnw --no-transfer-progress test
+    - sh mvnw --no-transfer-progress test
 
 test:companyms:
   <<: *test-template
   needs: [build:companyms]
   script:
     - cd companyms/companyms
-    - ./mvnw --no-transfer-progress test
+    - sh mvnw --no-transfer-progress test
 
 test:jobms:
   <<: *test-template
   needs: [build:jobms]
   script:
     - cd jobms/jobms
-    - ./mvnw --no-transfer-progress test
+    - sh mvnw --no-transfer-progress test
 
 test:reviewms:
   <<: *test-template
   needs: [build:reviewms]
   script:
     - cd reviewms/reviewms
-    - ./mvnw --no-transfer-progress test
+    - sh mvnw --no-transfer-progress test
 
 # ===========================================================================
 # STAGE 3 — DOCKER BUILD & PUSH
