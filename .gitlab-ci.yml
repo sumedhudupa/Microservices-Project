@@ -106,11 +106,18 @@ variables:
     - docker:26-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
+    # GitLab injects DOCKER_AUTH_CONFIG directly into the Docker config file,
+    # bypassing shell pipes and variable masking entirely.
+    # Set this CI/CD variable in GitLab → Settings → CI/CD → Variables:
+    #   Key:   DOCKER_AUTH_CONFIG
+    #   Value: {"auths":{"https://index.docker.io/v1/":{"auth":"<base64(user:token)>"}}}
+    #   Generate the value with: echo -n "yourusername:yourtoken" | base64
+    DOCKER_CONFIG: "$CI_PROJECT_DIR/.docker"
   before_script:
-    - mkdir -p $HOME/.docker
-    - echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$(printf '%s:%s' "$DOCKER_HUB_USER" "$DOCKER_HUB_PASSWORD" | base64 | tr -d '\n')\"}}}" > $HOME/.docker/config.json
+    - mkdir -p "$DOCKER_CONFIG"
+    - echo "$DOCKER_AUTH_CONFIG" > "$DOCKER_CONFIG/config.json"
   after_script:
-    - rm -f $HOME/.docker/config.json
+    - rm -rf "$DOCKER_CONFIG"
   needs: []   # override per-job to depend on its own build job
 
 # ===========================================================================
