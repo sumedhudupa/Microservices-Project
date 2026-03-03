@@ -1,0 +1,269 @@
+# ============================================================
+# GitLab CI/CD Pipeline — Microservices Project
+# Services: service-reg | config-server | gateway |
+#           companyms   | jobms         | reviewms
+# ============================================================
+
+stages:
+  - build
+  - test
+  - docker-build
+  - deploy
+
+# ---------------------------------------------------------------------------
+# Global defaults
+# ---------------------------------------------------------------------------
+default:
+  interruptible: true
+
+variables:
+  DOCKER_HUB_USER: sumedhudupa        # override via GitLab CI/CD variable
+  MAVEN_OPTS: >-
+    -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
+    -Dmaven.test.failure.ignore=false
+
+# Cache Maven dependencies across jobs on the same branch
+.maven-cache: &maven-cache
+  cache:
+    key: maven-$CI_COMMIT_REF_SLUG
+    paths:
+      - .m2/repository
+    policy: pull-push
+
+# ---------------------------------------------------------------------------
+# Reusable build template
+# ---------------------------------------------------------------------------
+.build-template: &build-template
+  image: eclipse-temurin:17-jdk-alpine
+  stage: build
+  <<: *maven-cache
+  artifacts:
+    paths:
+      - "*/target/*.jar"
+    expire_in: 1 hour
+
+# ---------------------------------------------------------------------------
+# Reusable test template
+# ---------------------------------------------------------------------------
+.test-template: &test-template
+  image: eclipse-temurin:17-jdk-alpine
+  stage: test
+  <<: *maven-cache
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "*/target/surefire-reports/TEST-*.xml"
+    expire_in: 1 week
+
+# ---------------------------------------------------------------------------
+# Reusable Docker build+push template
+# ---------------------------------------------------------------------------
+.docker-template: &docker-template
+  image: docker:26
+  stage: docker-build
+  services:
+    - docker:26-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USER" --password-stdin
+  after_script:
+    - docker logout
+  needs: []   # override per-job to depend on its own build job
+
+# ===========================================================================
+# STAGE 1 — BUILD
+# ===========================================================================
+
+build:service-reg:
+  <<: *build-template
+  script:
+    - cd service-reg/service-reg
+    - ./mvnw --no-transfer-progress package -DskipTests
+
+build:config-server:
+  <<: *build-template
+  script:
+    - cd Config-server
+    - ./mvnw --no-transfer-progress package -DskipTests
+
+build:gateway:
+  <<: *build-template
+  script:
+    - cd gateway/gateway
+    - ./mvnw --no-transfer-progress package -DskipTests
+
+build:companyms:
+  <<: *build-template
+  script:
+    - cd companyms/companyms
+    - ./mvnw --no-transfer-progress package -DskipTests
+
+build:jobms:
+  <<: *build-template
+  script:
+    - cd jobms/jobms
+    - ./mvnw --no-transfer-progress package -DskipTests
+
+build:reviewms:
+  <<: *build-template
+  script:
+    - cd reviewms/reviewms
+    - ./mvnw --no-transfer-progress package -DskipTests
+
+# ===========================================================================
+# STAGE 2 — TEST
+# ===========================================================================
+
+test:service-reg:
+  <<: *test-template
+  needs: [build:service-reg]
+  script:
+    - cd service-reg/service-reg
+    - ./mvnw --no-transfer-progress test
+
+test:config-server:
+  <<: *test-template
+  needs: [build:config-server]
+  script:
+    - cd Config-server
+    - ./mvnw --no-transfer-progress test
+
+test:gateway:
+  <<: *test-template
+  needs: [build:gateway]
+  script:
+    - cd gateway/gateway
+    - ./mvnw --no-transfer-progress test
+
+test:companyms:
+  <<: *test-template
+  needs: [build:companyms]
+  script:
+    - cd companyms/companyms
+    - ./mvnw --no-transfer-progress test
+
+test:jobms:
+  <<: *test-template
+  needs: [build:jobms]
+  script:
+    - cd jobms/jobms
+    - ./mvnw --no-transfer-progress test
+
+test:reviewms:
+  <<: *test-template
+  needs: [build:reviewms]
+  script:
+    - cd reviewms/reviewms
+    - ./mvnw --no-transfer-progress test
+
+# ===========================================================================
+# STAGE 3 — DOCKER BUILD & PUSH
+# (Only on the main branch or when a tag is pushed)
+# ===========================================================================
+
+.docker-only: &docker-only
+  only:
+    - main
+    - tags
+
+docker:config-server:
+  <<: *docker-template
+  <<: *docker-only
+  needs: [test:config-server]
+  script:
+    - IMAGE=$DOCKER_HUB_USER/config-server
+    - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
+    - docker build -t $IMAGE:$TAG -t $IMAGE:latest Config-server/
+    - docker push $IMAGE:$TAG
+    - docker push $IMAGE:latest
+
+docker:gateway:
+  <<: *docker-template
+  <<: *docker-only
+  needs: [test:gateway]
+  script:
+    - IMAGE=$DOCKER_HUB_USER/gateway
+    - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
+    - docker build -t $IMAGE:$TAG -t $IMAGE:latest gateway/gateway/
+    - docker push $IMAGE:$TAG
+    - docker push $IMAGE:latest
+
+docker:companyms:
+  <<: *docker-template
+  <<: *docker-only
+  needs: [test:companyms]
+  script:
+    - IMAGE=$DOCKER_HUB_USER/companyms
+    - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
+    - docker build -t $IMAGE:$TAG -t $IMAGE:latest companyms/companyms/
+    - docker push $IMAGE:$TAG
+    - docker push $IMAGE:latest
+
+docker:jobms:
+  <<: *docker-template
+  <<: *docker-only
+  needs: [test:jobms]
+  script:
+    - IMAGE=$DOCKER_HUB_USER/jobms
+    - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
+    - docker build -t $IMAGE:$TAG -t $IMAGE:latest jobms/jobms/
+    - docker push $IMAGE:$TAG
+    - docker push $IMAGE:latest
+
+docker:reviewms:
+  <<: *docker-template
+  <<: *docker-only
+  needs: [test:reviewms]
+  script:
+    - IMAGE=$DOCKER_HUB_USER/reviewms
+    - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
+    - docker build -t $IMAGE:$TAG -t $IMAGE:latest reviewms/reviewms/
+    - docker push $IMAGE:$TAG
+    - docker push $IMAGE:latest
+
+# ===========================================================================
+# STAGE 4 — DEPLOY TO KUBERNETES
+# Requires CI/CD variable: KUBE_CONFIG (base64-encoded kubeconfig)
+# Only runs on main branch / tag pushes — manual trigger for safety.
+# ===========================================================================
+
+.k8s-deploy: &k8s-deploy
+  image: bitnami/kubectl:latest
+  stage: deploy
+  only:
+    - main
+    - tags
+  when: manual        # Remove this line to enable automatic deployments
+  before_script:
+    - mkdir -p ~/.kube
+    - echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+    - chmod 600 ~/.kube/config
+
+deploy:infra:
+  <<: *k8s-deploy
+  needs:
+    - docker:companyms
+    - docker:jobms
+    - docker:reviewms
+    - docker:gateway
+    - docker:config-server
+  script:
+    # Infrastructure services (Postgres, RabbitMQ)
+    - kubectl apply -f k8s/services/postgres/
+    - kubectl apply -f k8s/services/rabbitmq/
+    - kubectl rollout status deployment/rabbitmq --timeo ut=120s
+
+deploy:apps:
+  <<: *k8s-deploy
+  needs: [deploy:infra]
+  script:
+    # Application microservices
+    - kubectl apply -f k8s/bootstrap/company/
+    - kubectl apply -f k8s/bootstrap/job/
+    - kubectl apply -f k8s/bootstrap/review/
+    # Wait for rollouts to complete
+    - kubectl rollout status deployment/company --timeout=180s
+    - kubectl rollout status deployment/job     --timeout=180s
+    - kubectl rollout status deployment/review  --timeout=180s
