@@ -67,6 +67,8 @@ variables:
   services:
     - name: postgres:15-alpine
       alias: postgres
+    - name: rabbitmq:3-alpine
+      alias: rabbitmq
   variables:
     # Postgres service config
     POSTGRES_DB: testdb
@@ -78,13 +80,15 @@ variables:
     SPRING_DATASOURCE_USERNAME: testuser
     SPRING_DATASOURCE_PASSWORD: testpass
     SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+    # RabbitMQ service config — needed by services with custom @Configuration
+    # classes that inject ConnectionFactory directly (cannot be auto-excluded)
+    SPRING_RABBITMQ_HOST: rabbitmq
+    SPRING_RABBITMQ_PORT: "5672"
+    SPRING_RABBITMQ_USERNAME: guest
+    SPRING_RABBITMQ_PASSWORD: guest
     # Skip config server lookup during tests
     SPRING_CONFIG_IMPORT: "optional:configserver:"
     SPRING_CLOUD_CONFIG_ENABLED: "false"
-    # Disable RabbitMQ auto-config — some services have spring-boot-starter-amqp
-    # but no broker is available in CI; safe to set for all DB-backed services
-    SPRING_AUTOCONFIGURE_EXCLUDE: >-
-      org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   artifacts:
     when: always
     reports:
