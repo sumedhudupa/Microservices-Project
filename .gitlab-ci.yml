@@ -278,7 +278,7 @@ docker:reviewms:
 # ===========================================================================
 
 .k8s-deploy: &k8s-deploy
-  image: bitnami/kubectl:latest
+  image: alpine/k8s:1.28.15
   stage: deploy
   only:
     - main
