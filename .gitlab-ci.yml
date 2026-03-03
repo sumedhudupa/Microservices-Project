@@ -253,7 +253,7 @@ deploy:infra:
     # Infrastructure services (Postgres, RabbitMQ)
     - kubectl apply -f k8s/services/postgres/
     - kubectl apply -f k8s/services/rabbitmq/
-    - kubectl rollout status deployment/rabbitmq --timeo ut=120s
+    - kubectl rollout status deployment/rabbitmq --timeout=120s
 
 deploy:apps:
   <<: *k8s-deploy
