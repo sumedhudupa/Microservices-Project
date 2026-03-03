@@ -72,7 +72,8 @@ variables:
     POSTGRES_DB: testdb
     POSTGRES_USER: testuser
     POSTGRES_PASSWORD: testpass
-    # Override Spring Boot datasource to point at the service container
+    # Force PostgreSQL driver — prevents H2 (also on classpath) from being picked up
+    SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/testdb"
     SPRING_DATASOURCE_USERNAME: testuser
     SPRING_DATASOURCE_PASSWORD: testpass
@@ -80,6 +81,10 @@ variables:
     # Skip config server lookup during tests
     SPRING_CONFIG_IMPORT: "optional:configserver:"
     SPRING_CLOUD_CONFIG_ENABLED: "false"
+    # Disable RabbitMQ auto-config — some services have spring-boot-starter-amqp
+    # but no broker is available in CI; safe to set for all DB-backed services
+    SPRING_AUTOCONFIGURE_EXCLUDE: >-
+      org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   artifacts:
     when: always
     reports:
@@ -171,11 +176,6 @@ test:gateway:
 test:companyms:
   <<: *db-test-template
   needs: [build:companyms]
-  variables:
-    # Disable RabbitMQ auto-config — companyms has spring-boot-starter-amqp but
-    # there is no broker available in the CI test environment
-    SPRING_AUTOCONFIGURE_EXCLUDE: >-
-      org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   script:
     - cd companyms/companyms
     - sh mvnw --no-transfer-progress test
