@@ -43,12 +43,43 @@ variables:
     expire_in: 1 hour
 
 # ---------------------------------------------------------------------------
-# Reusable test template
+# Reusable test template  (services without a database)
 # ---------------------------------------------------------------------------
 .test-template: &test-template
   image: eclipse-temurin:17-jdk-alpine
   stage: test
   <<: *maven-cache
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "*/target/surefire-reports/TEST-*.xml"
+    expire_in: 1 week
+
+# ---------------------------------------------------------------------------
+# Test template for services that require a PostgreSQL database
+# GitLab CI exposes the service at hostname "postgres" (the alias below)
+# ---------------------------------------------------------------------------
+.db-test-template: &db-test-template
+  image: eclipse-temurin:17-jdk-alpine
+  stage: test
+  <<: *maven-cache
+  services:
+    - name: postgres:15-alpine
+      alias: postgres
+  variables:
+    # Postgres service config
+    POSTGRES_DB: testdb
+    POSTGRES_USER: testuser
+    POSTGRES_PASSWORD: testpass
+    # Override Spring Boot datasource to point at the service container
+    SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/testdb"
+    SPRING_DATASOURCE_USERNAME: testuser
+    SPRING_DATASOURCE_PASSWORD: testpass
+    SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+    # Skip config server lookup during tests
+    SPRING_CONFIG_IMPORT: "optional:configserver:"
+    SPRING_CLOUD_CONFIG_ENABLED: "false"
   artifacts:
     when: always
     reports:
@@ -138,21 +169,26 @@ test:gateway:
     - sh mvnw --no-transfer-progress test
 
 test:companyms:
-  <<: *test-template
+  <<: *db-test-template
   needs: [build:companyms]
+  variables:
+    # Disable RabbitMQ auto-config — companyms has spring-boot-starter-amqp but
+    # there is no broker available in the CI test environment
+    SPRING_AUTOCONFIGURE_EXCLUDE: >-
+      org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   script:
     - cd companyms/companyms
     - sh mvnw --no-transfer-progress test
 
 test:jobms:
-  <<: *test-template
+  <<: *db-test-template
   needs: [build:jobms]
   script:
     - cd jobms/jobms
     - sh mvnw --no-transfer-progress test
 
 test:reviewms:
-  <<: *test-template
+  <<: *db-test-template
   needs: [build:reviewms]
   script:
     - cd reviewms/reviewms
@@ -171,7 +207,7 @@ test:reviewms:
 docker:config-server:
   <<: *docker-template
   <<: *docker-only
-  needs: [test:config-server]
+  needs: [build:config-server, test:config-server]
   script:
     - IMAGE=$DOCKER_HUB_USER/config-server
     - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
@@ -182,7 +218,7 @@ docker:config-server:
 docker:gateway:
   <<: *docker-template
   <<: *docker-only
-  needs: [test:gateway]
+  needs: [build:gateway, test:gateway]
   script:
     - IMAGE=$DOCKER_HUB_USER/gateway
     - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
@@ -193,7 +229,7 @@ docker:gateway:
 docker:companyms:
   <<: *docker-template
   <<: *docker-only
-  needs: [test:companyms]
+  needs: [build:companyms, test:companyms]
   script:
     - IMAGE=$DOCKER_HUB_USER/companyms
     - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
@@ -204,7 +240,7 @@ docker:companyms:
 docker:jobms:
   <<: *docker-template
   <<: *docker-only
-  needs: [test:jobms]
+  needs: [build:jobms, test:jobms]
   script:
     - IMAGE=$DOCKER_HUB_USER/jobms
     - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
@@ -215,7 +251,7 @@ docker:jobms:
 docker:reviewms:
   <<: *docker-template
   <<: *docker-only
-  needs: [test:reviewms]
+  needs: [build:reviewms, test:reviewms]
   script:
     - IMAGE=$DOCKER_HUB_USER/reviewms
     - TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
