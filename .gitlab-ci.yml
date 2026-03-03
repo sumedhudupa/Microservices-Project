@@ -107,7 +107,7 @@ variables:
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
   before_script:
-    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USER" --password-stdin
+    - docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
   after_script:
     - docker logout
   needs: []   # override per-job to depend on its own build job
