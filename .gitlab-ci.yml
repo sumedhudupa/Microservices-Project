@@ -39,7 +39,7 @@ variables:
   <<: *maven-cache
   artifacts:
     paths:
-      - "*/target/*.jar"
+      - "**/target/*.jar"
     expire_in: 1 hour
 
 # ---------------------------------------------------------------------------
