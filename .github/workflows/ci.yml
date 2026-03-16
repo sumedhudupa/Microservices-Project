@@ -1,0 +1,140 @@
+name: Microservices CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test-basic:
+    runs-on: ubuntu-latest
+    env:
+      MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+    strategy:
+      fail-fast: false
+      matrix: 
+        include:
+          - name: service-reg
+            path: service-reg/service-reg
+          - name: config-server
+            path: Config-server
+          - name: gateway
+            path: gateway/gateway
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Build and test
+        working-directory: ${{ matrix.path }}
+        run: |
+          chmod +x ./mvnw
+          ./mvnw --no-transfer-progress test
+
+  build-test-db:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: companyms
+            path: companyms/companyms
+          - name: jobms
+            path: jobms/jobms
+          - name: reviewms
+            path: reviewms/reviewms
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: testdb
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+      rabbitmq:
+        image: rabbitmq:3-alpine
+        ports:
+          - 5672:5672
+    env:
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/testdb
+      SPRING_DATASOURCE_USERNAME: testuser
+      SPRING_DATASOURCE_PASSWORD: testpass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_RABBITMQ_HOST: localhost
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      SPRING_CONFIG_IMPORT: "optional:configserver:"
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Build and test
+        working-directory: ${{ matrix.path }}
+        run: |
+          chmod +x ./mvnw
+          ./mvnw --no-transfer-progress test
+
+  docker-build-push:
+    runs-on: ubuntu-latest
+    needs: [build-test-basic, build-test-db]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: config-server
+            path: Config-server
+            image: config-server
+          - name: gateway
+            path: gateway/gateway
+            image: gateway
+          - name: companyms
+            path: companyms/companyms
+            image: companyms
+          - name: jobms
+            path: jobms/jobms
+            image: jobms
+          - name: reviewms
+            path: reviewms/reviewms
+            image: reviewms
+          - name: service-reg
+            path: service-reg/service-reg
+            image: service-reg
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/${{ matrix.image }}
+          TAG=${GITHUB_REF#refs/tags/}
+          if [ "$TAG" = "$GITHUB_REF" ]; then TAG=${GITHUB_SHA::7}; fi
+          docker build -t $IMAGE:$TAG -t $IMAGE:latest ${{ matrix.path }}
+          docker push $IMAGE:$TAG
+          docker push $IMAGE:latest
